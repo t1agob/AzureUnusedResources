@@ -22,7 +22,7 @@ function Log($message){
     }
 }
 
-function GetAllVMProperties(){
+function GetVMProperties(){
     # Get All VM Information
     $AllVMS = Get-AzureRmVM
     Log([String]::Format("Found {0} VMs", $AllVMS.Count))
@@ -148,7 +148,7 @@ foreach ($subscription in $SelectedSubscriptions){
     Log ("Subscription Selected.")
 
     Log ("Starting VM Properties Collection")    
-    $VMProperties=GetAllVMProperties
+    $VMProperties=GetVMProperties
     Log ("Collected VM Properties")    
 
     Switch ($Scope) {
