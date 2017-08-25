@@ -165,6 +165,15 @@ foreach ($subscription in $SelectedSubscriptions){
             
         }
     }
+
+    if($Mode -eq 'Production'){
+        # Removes resources identified as unused
+
+    }
+    elseif ($Mode -eq 'AnalysisOnly'){
+        # Prints resources identified as unused to the screen
+        
+    }
 }
 
 
