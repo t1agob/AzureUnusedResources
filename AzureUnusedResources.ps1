@@ -2,8 +2,9 @@ Param(
     [Parameter(Mandatory=$true)]
     [ValidateSet('All','Storage','Network')]	
     [String[]] $Scope,
-    [Switch] $AskLogin,
-    [Switch] $ServicePrincipal,
+    [Parameter(Mandatory=$true)]
+    [ValidateSet('Handled','Prompt','ServicePrincipal')]
+    [String[]] $AuthMode,
     [String] $SPUser,
     [String] $SPKey,
     [String] $Tenant,
@@ -41,9 +42,16 @@ function GetVMProperties(){
         # Disks
         $storage = $VM.StorageProfile
         $OSDisk = $storage.OsDisk
-        Log ([String]::Format("OS Disk is located in {0}", $OSDisk.vhd.uri))
-        $DiskURIList.Add($OSDisk.vhd.uri) > $null
-        
+
+        if($OSDisk.vhd -ne $null){
+            Log ([String]::Format("OS Disk is located in {0}", $OSDisk.vhd.uri))
+            $DiskURIList.Add($OSDisk.vhd.uri) > $null
+        }
+        else{            
+            Log ([String]::Format("OS Managed Disk id is {0}", $vm.StorageProfile.OsDisk.ManagedDisk.Id))
+            $DiskURIList.Add($OSDisk.StorageProfile.OsDisk.ManagedDisk.Id)
+        }
+
         #$DataDisks = New-Object System.Collections.ArrayList
         $DataDisks = $storage.DataDisks
         foreach ($disk in $DataDisks) {
@@ -62,6 +70,42 @@ function GetVMProperties(){
     }
 }
 
+
+function CollectStorageAccounts(){
+
+}
+
+function CollectManagedDisks(){
+    $ManagedDisks=Get-AzureRmDisk
+    Log ([String]::Format("Found {0} Managed Disks", $ManagedDiskList.Count))
+
+    foreach($disk in $ManagedDisks){
+        $ManagedDiskList.Add($$disk.Id);
+    }
+
+    Log ([String]::Format("Added {0} Managed Disks to List", $ManagedDiskList.Count))
+}
+
+function CollectPIPs(){
+    
+}
+
+function CollectNICs(){
+
+}
+
+function CollectNSGs(){
+
+}
+
+function CollectSubnets(){
+
+}
+
+function CollectVNETs(){
+
+}
+
 # VARIABLE DECLARATION
 
 $SelectedSubscriptions = New-Object System.Collections.ArrayList
@@ -69,6 +113,7 @@ $VMNames = New-Object System.Collections.ArrayList
 $VMDiagnosticsStorageUrl = New-Object System.Collections.ArrayList
 $DiskURIList = New-Object System.Collections.ArrayList
 $VMNICList = New-Object System.Collections.ArrayList
+$ManagedDiskList = New-Object System.Collections.ArrayList
 
 
 if($Mode -eq 'Production'){
@@ -89,23 +134,28 @@ if($Mode -eq 'Production'){
 }
 
 # MAIN SCRIPT
-if($AskLogin){
+if($AuthMode -eq "Prompt"){
     # Ask User for credentials
+    Log ("Asking user for credentials")
     Add-AzureRmAccount
+    Log ("Successfuly authenticated")
 }
-elseif($ServicePrincipal){
+elseif($AuthMode -eq "ServicePrincipal"){
     # Validate Service Principal credentials
     if($SPUser -eq $null -or $SPUser -eq "" `
         -or $SPKey -eq $null -or $SPKey -eq "" `
         -or $Tenant -eq $null -or $Tenant -eq ""){        
-        Write-Error "Service Principal Credentials are missing. When specifying '-ServicePrincipal' switch, UserName, Key and Tenant properties are mandatory. Exiting now."
+        Log("Values missing for Service Principal")    
+        Write-Error "Service Principal Credentials are missing. When specifying '-ServicePrincipal' switch, UserName, Key and Tenant properties are mandatory. Exiting now."        
         exit
     }
     else{  # Authenticate with Service Principal Credentials
         $pass = ConvertTo-SecureString $SPKey -AsPlainText -Force
         $creds = New-Object -TypeName PSCredential -ArgumentList $SPUser, $pass
         
+        Log ([String]::Format("Authenticating with Service Principal",$SPUser))
         Add-AzureRmAccount -Credential $creds -ServicePrincipal -TenantId $Tenant        
+        Log ("Successfuly authenticated")
     }
 }
 
@@ -125,7 +175,6 @@ if(!$ServicePrincipal){
 	    $options = [System.Management.Automation.Host.ChoiceDescription[]]($yes, $no)
 	    $result = $host.ui.PromptForChoice($title, $message, $options, 0) 
     
-
         switch ($result){
             0 {
                 $SelectedSubscriptions.Add($subscription) > $null
@@ -148,32 +197,66 @@ foreach ($subscription in $SelectedSubscriptions){
     Log ("Subscription Selected.")
 
     Log ("Starting VM Properties Collection")    
-    $VMProperties=GetVMProperties
+    GetVMProperties
     Log ("Collected VM Properties")    
 
     Switch ($Scope) {
         All { 
+            Log ("Collecting information on Storage Accounts")
+            $StorageAccountsToProcess = CollectStorageAccounts
 
+            Log ("Collecting information on Managed Disks")
+            CollectManagedDisks
+
+            Log ("Collecting information on Networking")
+            $PIPsToProcess = CollectPIPs
+            $NICsToProcess = CollectNICs
+            $NSGsToProcess = CollectNSGs
+            $SubnetsToProcess = CollectSubnets
+            $VNETsToProcess = CollectVNETs
         }
         Storage { 
+            Log ("Collecting information on Storage Accounts")
+            $StorageAccountsToProcess = CollectStorageAccounts
 
+            Log ("Collecting information on Managed Disks")
+            CollectManagedDisks
         }
         Network { 
-            
+            Log ("Collecting information on Networking")
+            $PIPsToProcess = CollectPIPs
+            $NICsToProcess = CollectNICs
+            $NSGsToProcess = CollectNSGs
+            $SubnetsToProcess = CollectSubnets
+            $VNETsToProcess = CollectVNETs
         }
         Default { 
             
         }
-    }
+    }    
+}
 
-    if($Mode -eq 'Production'){
-        # Removes resources identified as unused
 
-    }
-    elseif ($Mode -eq 'AnalysisOnly'){
-        # Prints resources identified as unused to the screen
-        
-    }
+if($Mode -eq 'Production'){
+    # Removes resources identified as unused
+
+
+
+
+
+}
+elseif ($Mode -eq 'AnalysisOnly'){
+    # Prints resources identified as unused to the screen
+    Write-Host "*********************************************************" -ForegroundColor Yellow
+    Write-Host "*               ANALYSIS SUMMARY                        *" -ForegroundColor Yellow
+    Write-Host "*********************************************************" -ForegroundColor Yellow
+    Write-Host "The following items have been identified as not being used" -ForegroundColor Yellow
+    Write-Host "and they can be removed." -ForegroundColor Yellow
+
+
+
+
+    
 }
 
 
