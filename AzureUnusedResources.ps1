@@ -116,7 +116,18 @@ function CollectPIPs(){
 }
 
 function CollectNICs(){
+    $NICs=Get-AzureRmNetworkInterface
+    Log ([String]::Format("Found {0} NICs", $NICs.Count))
 
+    $nicCount = 0
+    foreach($nic in $NICs){
+       if($nic.VirtualMachine -eq $null){
+           $nicCount++
+           $NICList.Add($nic.Id) > $null
+       }
+    }
+
+    Log ([String]::Format("Added {0} NICs to List", $nicCount))
 }
 
 function CollectNSGs(){
@@ -147,6 +158,7 @@ $DiskURIList = New-Object System.Collections.ArrayList
 $VMNICList = New-Object System.Collections.ArrayList
 $ManagedDiskList = New-Object System.Collections.ArrayList
 $PIPList = New-Object System.Collections.ArrayList
+$NICList = New-Object System.Collections.ArrayList
 
 
 if($Mode -eq 'Production'){
@@ -243,7 +255,7 @@ foreach ($subscription in $SelectedSubscriptions){
 
             Log ("Collecting information on Networking")
             CollectPIPs
-            $NICsToProcess = CollectNICs
+            CollectNICs
             $NSGsToProcess = CollectNSGs
             $SubnetsToProcess = CollectSubnets
             $VNETsToProcess = CollectVNETs
@@ -258,7 +270,7 @@ foreach ($subscription in $SelectedSubscriptions){
         Network { 
             Log ("Collecting information on Networking")
             CollectPIPs
-            $NICsToProcess = CollectNICs
+            CollectNICs
             $NSGsToProcess = CollectNSGs
             $SubnetsToProcess = CollectSubnets
             $VNETsToProcess = CollectVNETs
@@ -287,11 +299,14 @@ elseif ($Mode -eq 'AnalysisOnly'){
     Write-Host "*   and they can be removed.                                     *" -ForegroundColor Yellow
     Write-Host "******************************************************************" -ForegroundColor Yellow
     
-    Write-Host "MANAGED DISKS:"
+    Write-Host "MANAGED DISKS:" -ForegroundColor Yellow
     Print -list $ManagedDiskList
 
-    Write-Host "PUBLIC IP:"
+    Write-Host "PUBLIC IPS:" -ForegroundColor Yellow
     Print -list $PIPList
+
+    Write-Host "NETWORK INTERFACES:" -ForegroundColor Yellow
+    Print -list $NICList
 
 }
 
