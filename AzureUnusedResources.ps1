@@ -91,7 +91,28 @@ function CollectManagedDisks(){
 }
 
 function CollectPIPs(){
-    
+    $PublicIPs = Get-AzureRmPublicIpAddress
+    Log ([String]::Format("Found {0} Public IP Addresses", $PublicIPs.Count))
+
+    $pipCount = 0
+    foreach ($pip in $PublicIPs){          
+        if($pip.IpConfiguration -eq $null){
+            $pipCount++
+            $PIPList.Add($pip.Id) > $null
+        }
+        else{
+            $pipConfigId = $pip.IpConfiguration.Id
+            if ($pipConfigId.split("/")[7] -ne 'virtualNetworkGateways'){
+                $nicId = $pipConfigId.Substring(0,$pipConfigId.IndexOf("/ipConfiguration"))
+                if(!$VMNICList.Contains($nicId)){
+                    $pipCount++
+                    $PIPList.Add($pip.Id) > $null
+                }
+            }
+        }        
+    }
+
+    Log ([String]::Format("Added {0} Public IP Addresses to List", $pipCount))
 }
 
 function CollectNICs(){
@@ -110,6 +131,13 @@ function CollectVNETs(){
 
 }
 
+function Print($list){
+    foreach($item in $list){
+        Write-Output (Get-AzureRmResource -ResourceId $item).Name
+    }
+
+}
+
 # VARIABLE DECLARATION
 
 $SelectedSubscriptions = New-Object System.Collections.ArrayList
@@ -118,6 +146,7 @@ $VMDiagnosticsStorageUrl = New-Object System.Collections.ArrayList
 $DiskURIList = New-Object System.Collections.ArrayList
 $VMNICList = New-Object System.Collections.ArrayList
 $ManagedDiskList = New-Object System.Collections.ArrayList
+$PIPList = New-Object System.Collections.ArrayList
 
 
 if($Mode -eq 'Production'){
@@ -213,7 +242,7 @@ foreach ($subscription in $SelectedSubscriptions){
             CollectManagedDisks
 
             Log ("Collecting information on Networking")
-            $PIPsToProcess = CollectPIPs
+            CollectPIPs
             $NICsToProcess = CollectNICs
             $NSGsToProcess = CollectNSGs
             $SubnetsToProcess = CollectSubnets
@@ -228,7 +257,7 @@ foreach ($subscription in $SelectedSubscriptions){
         }
         Network { 
             Log ("Collecting information on Networking")
-            $PIPsToProcess = CollectPIPs
+            CollectPIPs
             $NICsToProcess = CollectNICs
             $NSGsToProcess = CollectNSGs
             $SubnetsToProcess = CollectSubnets
@@ -251,16 +280,19 @@ if($Mode -eq 'Production'){
 }
 elseif ($Mode -eq 'AnalysisOnly'){
     # Prints resources identified as unused to the screen
-    Write-Host "*********************************************************" -ForegroundColor Yellow
-    Write-Host "*               ANALYSIS SUMMARY                        *" -ForegroundColor Yellow
-    Write-Host "*********************************************************" -ForegroundColor Yellow
-    Write-Host "The following items have been identified as not being used" -ForegroundColor Yellow
-    Write-Host "and they can be removed." -ForegroundColor Yellow
-
-
-
-
+    Write-Host "******************************************************************" -ForegroundColor Yellow
+    Write-Host "*                       ANALYSIS SUMMARY                         *" -ForegroundColor Yellow
+    Write-Host "******************************************************************" -ForegroundColor Yellow
+    Write-Host "*   The following items have been identified as not being used   *" -ForegroundColor Yellow
+    Write-Host "*   and they can be removed.                                     *" -ForegroundColor Yellow
+    Write-Host "******************************************************************" -ForegroundColor Yellow
     
+    Write-Host "MANAGED DISKS:"
+    Print -list $ManagedDiskList
+
+    Write-Host "PUBLIC IP:"
+    Print -list $PIPList
+
 }
 
 
