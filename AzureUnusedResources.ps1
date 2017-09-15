@@ -77,13 +77,17 @@ function CollectStorageAccounts(){
 
 function CollectManagedDisks(){
     $ManagedDisks=Get-AzureRmDisk
-    Log ([String]::Format("Found {0} Managed Disks", $ManagedDiskList.Count))
+    Log ([String]::Format("Found {0} Managed Disks", $ManagedDisks.Count))
 
+    $diskCount = 0
     foreach($disk in $ManagedDisks){
-        $ManagedDiskList.Add($$disk.Id);
+        if($disk.OwnerId -eq $null){
+            $diskCount++
+            $ManagedDiskList.Add($disk.Id) > $null
+        }
     }
 
-    Log ([String]::Format("Added {0} Managed Disks to List", $ManagedDiskList.Count))
+    Log ([String]::Format("Added {0} Managed Disks to List", $diskCount))
 }
 
 function CollectPIPs(){
