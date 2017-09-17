@@ -131,7 +131,33 @@ function CollectNICs(){
 }
 
 function CollectNSGs(){
+    $NSGs=Get-AzureRmNetworkSecurityGroup
+    Log ([String]::Format("Found {0} NSGs", $NSGs.Count))
 
+    $nsgCount = 0
+    foreach($nsg in $NSGs){
+       if(($nsg.NetworkInterfaces.Count -eq 0) -and ($nsg.Subnets.Count -eq 0)){
+           $nsgCount++
+           $NSGList.Add($nsg.Id) > $null
+       }
+       else{
+           if($nsg.Subnets.Count -eq 0){
+                $NICcheck = 0
+                foreach ($nic in $nsg.NetworkInterfaces){
+                    if($NICList.contains($nic.Id)){
+                            $NICcheck++
+                    }
+                }
+
+                if($NICcheck -eq $nsg.NetworkInterfaces.Count){
+                    $nsgCount++
+                    $NSGList.Add($nsg.Id) > $null
+                }
+           }
+       }
+    }
+
+    Log ([String]::Format("Added {0} NSGs to List", $nsgCount))
 }
 
 function CollectSubnets(){
@@ -159,6 +185,7 @@ $VMNICList = New-Object System.Collections.ArrayList
 $ManagedDiskList = New-Object System.Collections.ArrayList
 $PIPList = New-Object System.Collections.ArrayList
 $NICList = New-Object System.Collections.ArrayList
+$NSGList = New-Object System.Collections.ArrayList
 
 
 if($Mode -eq 'Production'){
@@ -256,7 +283,7 @@ foreach ($subscription in $SelectedSubscriptions){
             Log ("Collecting information on Networking")
             CollectPIPs
             CollectNICs
-            $NSGsToProcess = CollectNSGs
+            CollectNSGs
             $SubnetsToProcess = CollectSubnets
             $VNETsToProcess = CollectVNETs
         }
@@ -271,7 +298,7 @@ foreach ($subscription in $SelectedSubscriptions){
             Log ("Collecting information on Networking")
             CollectPIPs
             CollectNICs
-            $NSGsToProcess = CollectNSGs
+            CollectNSGs
             $SubnetsToProcess = CollectSubnets
             $VNETsToProcess = CollectVNETs
         }
@@ -307,6 +334,9 @@ elseif ($Mode -eq 'AnalysisOnly'){
 
     Write-Host "NETWORK INTERFACES:" -ForegroundColor Yellow
     Print -list $NICList
+
+    Write-Host "NETWORK SECURITY GROUPS:" -ForegroundColor Yellow
+    Print -list $NSGList
 
 }
 
