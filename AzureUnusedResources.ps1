@@ -49,14 +49,16 @@ function GetVMProperties(){
         }
         else{            
             Log ([String]::Format("OS Managed Disk id is {0}", $vm.StorageProfile.OsDisk.ManagedDisk.Id))
-            $DiskURIList.Add($OSDisk.StorageProfile.OsDisk.ManagedDisk.Id)
+            $DiskURIList.Add($OSDisk.StorageProfile.OsDisk.ManagedDisk.Id) > $null
         }
 
         #$DataDisks = New-Object System.Collections.ArrayList
         $DataDisks = $storage.DataDisks
         foreach ($disk in $DataDisks) {
-            Log ([String]::Format("Data Disk is located in {0}", $disk.vhd.uri))
-            $DiskURIList.Add($disk.vhd.uri) > $null
+            if($disk.vhd){
+                Log ([String]::Format("Data Disk is located in {0}", $disk.vhd.uri))
+                $DiskURIList.Add($disk.vhd.uri) > $null
+            }
         }
 
         # Network Interface Cards
@@ -103,10 +105,12 @@ function CollectPIPs(){
         else{
             $pipConfigId = $pip.IpConfiguration.Id
             if ($pipConfigId.split("/")[7] -ne 'virtualNetworkGateways'){
-                $nicId = $pipConfigId.Substring(0,$pipConfigId.IndexOf("/ipConfiguration"))
-                if(!$VMNICList.Contains($nicId)){
-                    $pipCount++
-                    $PIPList.Add($pip.Id) > $null
+                if($pipConfigId.Contains("/ipConfiguration")){
+                    $nicId = $pipConfigId.Substring(0,$pipConfigId.IndexOf("/ipConfiguration"))
+                    if(!$VMNICList.Contains($nicId)){
+                        $pipCount++
+                        $PIPList.Add($pip.Id) > $null
+                    }
                 }
             }
         }        
@@ -161,16 +165,63 @@ function CollectNSGs(){
 }
 
 function CollectSubnets(){
+    $VNETs=Get-AzureRmVirtualNetwork
+    Log ([String]::Format("Found {0} Virtual Networks", $VNETs.Count))
 
+    $subnetCount = 0
+    foreach($vnet in $VNETs){
+       foreach($subnet in $vnet.Subnets){
+           if($subnet.IPConfigurations.Count -eq 0){
+                if($subnet.ResourceNavigationLinks.Count -eq 0){
+                    if($subnet.RouteTable -eq $null){
+                        if($subnet.NetworkSecurityGroup -eq $null){
+                            $subnetCount++
+                            $SubnetList.Add($subnet.Id) > $null
+                        }
+                    }
+                }
+           }
+       }
+    }
+
+    Log ([String]::Format("Added {0} Subnets to List", $subnetCount))
 }
 
 function CollectVNETs(){
+    $VNETs=Get-AzureRmVirtualNetwork
+    Log ([String]::Format("Found {0} Virtual Networks", $VNETs.Count))
 
+    $vnetCount = 0
+    foreach($vnet in $VNETs){
+        if($vnet.VirtualNetworkPeerings.Count -eq 0){
+            $subnetCount = 0
+            foreach($subnet in $vnet.Subnets){
+                if($subnet.IPConfigurations.Count -eq 0){
+                    if($subnet.ResourceNavigationLinks.Count -eq 0){
+                        if($subnet.RouteTable -eq $null){
+                            if($subnet.NetworkSecurityGroup -eq $null){
+                                $subnetCount++                    
+                            }
+                        }
+                        
+                    }
+                }
+            }
+
+            if($subnetCount -eq $vnet.Subnets.Count){
+                $vnetCount++
+                $VNETList.Add($vnet.Id) > $null
+            }            
+        }       
+    }
+
+    Log ([String]::Format("Added {0} VNETs to List", $vnetCount))
 }
 
 function Print($list){
     foreach($item in $list){
-        Write-Output (Get-AzureRmResource -ResourceId $item).Name
+        $rname = $item.substring($item.LastIndexOf("/")+1, ($item.length - ($item.LastIndexOf("/")+1)))
+        Write-Output $rname
     }
 
 }
@@ -186,6 +237,8 @@ $ManagedDiskList = New-Object System.Collections.ArrayList
 $PIPList = New-Object System.Collections.ArrayList
 $NICList = New-Object System.Collections.ArrayList
 $NSGList = New-Object System.Collections.ArrayList
+$SubnetList = New-Object System.Collections.ArrayList
+$VNETList = New-Object System.Collections.ArrayList
 
 
 if($Mode -eq 'Production'){
@@ -284,8 +337,8 @@ foreach ($subscription in $SelectedSubscriptions){
             CollectPIPs
             CollectNICs
             CollectNSGs
-            $SubnetsToProcess = CollectSubnets
-            $VNETsToProcess = CollectVNETs
+            CollectSubnets
+            CollectVNETs
         }
         Storage { 
             Log ("Collecting information on Storage Accounts")
@@ -299,8 +352,8 @@ foreach ($subscription in $SelectedSubscriptions){
             CollectPIPs
             CollectNICs
             CollectNSGs
-            $SubnetsToProcess = CollectSubnets
-            $VNETsToProcess = CollectVNETs
+            CollectSubnets
+            CollectVNETs
         }
         Default { 
             
@@ -338,6 +391,11 @@ elseif ($Mode -eq 'AnalysisOnly'){
     Write-Host "NETWORK SECURITY GROUPS:" -ForegroundColor Yellow
     Print -list $NSGList
 
+    Write-Host "SUBNETS:" -ForegroundColor Yellow
+    Print -list $SubnetList
+
+    Write-Host "VNETS:" -ForegroundColor Yellow
+    Print -list $VNETList
 }
 
 

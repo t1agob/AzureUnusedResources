@@ -7,8 +7,6 @@ This script can be run manually or in an automated way since it authentication u
 
  - Production Mode
  - Storage Account Analysis
- - Virtual Network Analysis
- - Subnet Analysis
 
 ## Authentication with Microsot Azure
 In order to use this script you need to be authenticated. You can handle it yourself or you can let the script authenticate you. For that you need to use the **_AuthMode_** parameter. Allowed values are:
